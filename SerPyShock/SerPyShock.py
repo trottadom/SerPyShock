@@ -19,107 +19,6 @@ import matplotlib.pyplot as plt
 class ShockParameters:
     pass
 
-#% Functions to rankinise
-def create_ranki_stream(Bx1,Bx2,By1,By2,Vx1,Vx2,Vy1,Vy2,rho1,rho2,nts, mode, noise_level = 0.):
-    """
-    Create Stream of data compliant with Rankine-Hugoniot jump conditions
-
-    Parameters
-    ----------
-    Bx1 : 'float64'
-        Value of Bx upstream.
-    Bx2 : 'float64'
-        Value of Bx downstream.
-    By1 : 'float64'
-        Value of By upstream.
-    By2 : 'float64'
-        Value of By downstream.
-    Vx1 : 'float64'
-        Value of Vx upstream.
-    Vx2 : 'float64'
-        Value of Vx downstream.
-    Vy1 : 'float64'
-        Value of Vy upstream.
-    Vy2 : 'float64'
-        Value of Vy downstream.
-    rho1 : 'float64'
-        Value of plasma density upstream.
-    rho2 : 'float64'
-        Value of plasma density downstream.
-    nts : 'int'
-        Number of timestamps needed.
-    mode : 'str'
-        Choose if other signals need to be superimposed to the RH compliant one.
-        Implemented: 'clean': no superimpositions, 'white_noise': include white noise
-    noise_level : 'float64', optional
-        Level of white noise desired. The default is 0..
-
-    Returns
-    -------
-    B : 'numpy array'
-        Array containing magnetic field synthetic measurements, dimensions nts x 4 (components+magnitude)
-    V : 'numpy array'
-        Array containing bulk flow speed synthetic measurements, dimensions nts x 4 (components+magnitude).
-    rho : 'numpy array'
-        Array containing plasma density synthetic measurements, dimensions nts x 1.
-
-    """
-    B = np.zeros([nts,4])
-    V = np.zeros([nts,4])
-    rho = np.zeros([nts,1])
-    nts2 = int(nts/2)
-    if(mode == 'clean'):
-        for i in range(nts2):
-            B[i,0] = Bx1
-            B[i,1] = By1
-            B[i,2] = 0.0
-            B[i,3] = np.sqrt(Bx1**2+By1**2)
-            
-            B[i+nts2,0] = Bx2
-            B[i+nts2,1] = By2
-            B[i+nts2,2] = 0.0
-            B[i+nts2,3] = np.sqrt(Bx2**2+By2**2)
-            
-            V[i,0] = Vx1
-            V[i,1] = Vy1
-            V[i,2] = 0.0
-            V[i,3] = np.sqrt(Vx1**2+Vy1**2)
-            
-            V[i+nts2,0] = Vx2
-            V[i+nts2,1] = Vy2
-            V[i+nts2,2] = 0.0
-            V[i+nts2,3] = np.sqrt(Vx2**2+Vy2**2)
-            
-            rho[i] = rho1
-            rho[i+nts2] = rho2
-            
-    if(mode == 'white_noise'):
-        for i in range(nts2):
-            B[i,0] = Bx1 + np.random.normal(0. , Bx1*noise_level)
-            B[i,1] = By1 + np.random.normal(0. , By1*noise_level)
-            B[i,2] = 0.0 + np.random.normal(0. , noise_level)
-            B[i,3] = np.sqrt(B[i,0]**2+B[i,1]**2+B[i,2]**2)
-            
-            B[i+nts2,0] = Bx2 + np.random.normal(0. , Bx2*noise_level)
-            B[i+nts2,1] = By2 + np.random.normal(0. , By2*noise_level)
-            B[i+nts2,2] = 0.0 + np.random.normal(0. , noise_level)
-            B[i+nts2,3] = np.sqrt(B[i+nts2,0]**2+B[i+nts2,1]**2+B[i+nts2,2]**2)
-            
-            V[i,0] = Vx1 + np.random.normal(0. , Vx1*noise_level)
-            V[i,1] = Vy1 + np.random.normal(0. , Vy1*noise_level)
-            V[i,2] = 0.0 + np.random.normal(0. , noise_level)
-            V[i,3] = np.sqrt(V[i,0]**2+V[i,1]**2+V[i,2]**2)
-            
-            V[i+nts2,0] = Vx2 + np.random.normal(0. , Vx2*noise_level)
-            V[i+nts2,1] = Vy2 + np.random.normal(0. , Vy2*noise_level)
-            V[i+nts2,2] = 0.0 + np.random.normal(0. , noise_level)
-            V[i+nts2,3] = np.sqrt(V[i+nts2,0]**2+V[i+nts2,1]**2+V[i+nts2,2]**2)
-            
-            rho[i] = rho1 + np.random.normal(0. , rho1*noise_level)
-            rho[i+nts2] = rho2 + np.random.normal(0. , rho2*noise_level)
-
-
-    return B,V,rho
 
 def get_time_indices(tstart, tend, tm):
     """
@@ -701,5 +600,147 @@ def rgas_stats(trho, Rho, shock_time, up_shk, dw_shk, min_up_dur, max_up_dur, mi
     ex.r_max = r[iw-1]  # Smallest Upstream Smallest Downstream
     
     return r, ex
+
+#% Functions to rankinise
+def compute_Rankine_condition(Bx1, By1):
+    """
+    Routine that computes Rankine-Hugoniot relations
+
+    Parameters
+    ----------
+    Bx1 : 'float64'
+        Bx vlue upstream.
+    By1 : 'float64'
+        By value downstream.
+
+    Returns
+    -------
+    Bx1,Bx2,By1,By2,Vx1,Vx2,Vy1,Vy2,rho1,rho2: 'float64'
+        Magnetic field, bulk flow speed and density values upstream and dowsntream
+
+    """
+    
+    gam = 5/3
+    r   = 3.8
+    theta1 = 0 # Angle between bulk flow speed and shock normal (0 is NIF)
+    rho1 = 1
+    Vx1  = 200
+    Vy1  = 0
+    P1   = 10 
+    #rm   = (gam+1)/(gam-1)
+    Bm1  = np.sqrt(Bx1**2+By1**2)
+    va1 = np.sqrt((Bm1**2)/rho1)
+    vs1 = np.sqrt(gam*P1/rho1)
+    v1sq  = (2*r*vs1**2)/((gam +1) - (gam-1)*r) 
+    rho2 = r*rho1
+    Bx2  = Bx1
+    nom = v1sq - np.cos(theta1)**2*va1**2
+    den = v1sq - r*np.cos(theta1)**2*va1**2
+    By2 = By1*(r*nom/den)
+    Vx2 = Vx1/r
+    Vy2 = Vy1*nom/den
+    
+    return Bx1,Bx2,By1,By2,Vx1,Vx2,Vy1,Vy2,rho1,rho2
+
+def create_ranki_stream(Bx1,Bx2,By1,By2,Vx1,Vx2,Vy1,Vy2,rho1,rho2,nts, mode, noise_level = 0.):
+    """
+    Create Stream of data compliant with Rankine-Hugoniot jump conditions
+
+    Parameters
+    ----------
+    Bx1 : 'float64'
+        Value of Bx upstream.
+    Bx2 : 'float64'
+        Value of Bx downstream.
+    By1 : 'float64'
+        Value of By upstream.
+    By2 : 'float64'
+        Value of By downstream.
+    Vx1 : 'float64'
+        Value of Vx upstream.
+    Vx2 : 'float64'
+        Value of Vx downstream.
+    Vy1 : 'float64'
+        Value of Vy upstream.
+    Vy2 : 'float64'
+        Value of Vy downstream.
+    rho1 : 'float64'
+        Value of plasma density upstream.
+    rho2 : 'float64'
+        Value of plasma density downstream.
+    nts : 'int'
+        Number of timestamps needed.
+    mode : 'str'
+        Choose if other signals need to be superimposed to the RH compliant one.
+        Implemented: 'clean': no superimpositions, 'white_noise': include white noise
+    noise_level : 'float64', optional
+        Level of white noise desired. The default is 0..
+
+    Returns
+    -------
+    B : 'numpy array'
+        Array containing magnetic field synthetic measurements, dimensions nts x 4 (components+magnitude)
+    V : 'numpy array'
+        Array containing bulk flow speed synthetic measurements, dimensions nts x 4 (components+magnitude).
+    rho : 'numpy array'
+        Array containing plasma density synthetic measurements, dimensions nts x 1.
+
+    """
+    B = np.zeros([nts,4])
+    V = np.zeros([nts,4])
+    rho = np.zeros([nts,1])
+    nts2 = int(nts/2)
+    if(mode == 'clean'):
+        for i in range(nts2):
+            B[i,0] = Bx1
+            B[i,1] = By1
+            B[i,2] = 0.0
+            B[i,3] = np.sqrt(Bx1**2+By1**2)
+            
+            B[i+nts2,0] = Bx2
+            B[i+nts2,1] = By2
+            B[i+nts2,2] = 0.0
+            B[i+nts2,3] = np.sqrt(Bx2**2+By2**2)
+            
+            V[i,0] = Vx1
+            V[i,1] = Vy1
+            V[i,2] = 0.0
+            V[i,3] = np.sqrt(Vx1**2+Vy1**2)
+            
+            V[i+nts2,0] = Vx2
+            V[i+nts2,1] = Vy2
+            V[i+nts2,2] = 0.0
+            V[i+nts2,3] = np.sqrt(Vx2**2+Vy2**2)
+            
+            rho[i] = rho1
+            rho[i+nts2] = rho2
+            
+    if(mode == 'white_noise'):
+        for i in range(nts2):
+            B[i,0] = Bx1 + np.random.normal(0. , Bx1*noise_level)
+            B[i,1] = By1 + np.random.normal(0. , By1*noise_level)
+            B[i,2] = 0.0 + np.random.normal(0. , noise_level)
+            B[i,3] = np.sqrt(B[i,0]**2+B[i,1]**2+B[i,2]**2)
+            
+            B[i+nts2,0] = Bx2 + np.random.normal(0. , Bx2*noise_level)
+            B[i+nts2,1] = By2 + np.random.normal(0. , By2*noise_level)
+            B[i+nts2,2] = 0.0 + np.random.normal(0. , noise_level)
+            B[i+nts2,3] = np.sqrt(B[i+nts2,0]**2+B[i+nts2,1]**2+B[i+nts2,2]**2)
+            
+            V[i,0] = Vx1 + np.random.normal(0. , Vx1*noise_level)
+            V[i,1] = Vy1 + np.random.normal(0. , Vy1*noise_level)
+            V[i,2] = 0.0 + np.random.normal(0. , noise_level)
+            V[i,3] = np.sqrt(V[i,0]**2+V[i,1]**2+V[i,2]**2)
+            
+            V[i+nts2,0] = Vx2 + np.random.normal(0. , Vx2*noise_level)
+            V[i+nts2,1] = Vy2 + np.random.normal(0. , Vy2*noise_level)
+            V[i+nts2,2] = 0.0 + np.random.normal(0. , noise_level)
+            V[i+nts2,3] = np.sqrt(V[i+nts2,0]**2+V[i+nts2,1]**2+V[i+nts2,2]**2)
+            
+            rho[i] = rho1 + np.random.normal(0. , rho1*noise_level)
+            rho[i+nts2] = rho2 + np.random.normal(0. , rho2*noise_level)
+
+
+    return B,V,rho
 
 
